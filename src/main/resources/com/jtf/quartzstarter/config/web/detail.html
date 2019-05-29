@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>quartz</title>
+    <link rel="stylesheet" type="text/css" href="js/bootstrap-3.3.7-dist/css/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="js/bootstrap-3.3.7-dist/css/bootstrap-theme.min.css">
+    <link rel="stylesheet" type="text/css" href="js/My97DatePicker/skin/default/datepicker.css">
+    <link rel="stylesheet" type="text/css" href="css/sys.css">
+    <script src="js/jquery-1.9.1.min.js"></script>
+    <script src="js/bootstrap-3.3.7-dist/js/bootstrap.js"></script>
+    <script src="js/My97DatePicker/WdatePicker.js"></script>
+    <script src="js/My97DatePicker/lang/zh-cn.js"></script>
+    <script src="js/jquery-validation-1.14.0/lib/jquery.form.js"></script>
+    <script src="js/jquery-validation-1.14.0/dist/jquery.validate.min.js"></script>
+    <script src="js/jquery-validation-1.14.0/dist/additional-methods.min.js"></script>
+    <script src="js/jquery-validation-1.14.0/dist/localization/messages_zh.min.js"></script>
+    <script src="js/sys.js"></script>
+    <script>
+        $(function () {
+            var group = findOneUrlParam('group');
+            var name = findOneUrlParam("name");
+            var success = findOneUrlParam("success");
+            var time = findOneUrlParam("fireTime");
+            if(group && name && success && time){
+                $('#job').children("a")
+                    .attr("href","logging.html?group="+group+"&name="+name)
+                    .text(group+"."+name);
+                $('#detail').children("a")
+                    .attr("href","detail.html?group="+group+"&name="+name+"&success="+success+"&fireTime="+time)
+                    .text(success+"."+time+" 明细");
+                $.ajax({
+                    url:"api/findLogDetail",
+                    type:"POST",
+                    dataType:"json",
+                    data:{name:name, group:group, success:success,fireTime:time},
+                    async:false,
+                    beforeSend:function(xhr){
+                        loading(true)
+                    },
+                    complete:function(XHR, TS){
+                        loading(false);
+                    },
+                    error:function(xhr){
+                        alertCloseableDangerMessage("xhr:[status:"+xhr.status+"]"+",[response:"+xhr.responseText+"]");
+                    },
+                    success:function(data){
+                        if(data.flag){
+                           var reuslt = data.data;
+                           if(reuslt){
+                               var array = reuslt.split("\n");
+                               $.each(array, function (i,v) {
+                                   $("#body").append('<p>'+v+'</p>');
+                               });
+                           }
+
+                        }else {
+                            alertCloseableDangerMessage(data.message);
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+
+</head>
+<body>
+<ol class="breadcrumb">
+    <li><a href="index.html">Home</a></li>
+    <li id="job"><a></a></li>
+    <li id="detail"><a></a></li>
+</ol>
+<div id="body" style="margin-left: 40px;margin-right: 40px;"></div>
+</body>
+
+
+
+</html>

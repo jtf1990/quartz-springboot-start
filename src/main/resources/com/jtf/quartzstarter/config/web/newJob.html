@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>quartz</title>
+    <link rel="stylesheet" type="text/css" href="js/bootstrap-3.3.7-dist/css/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="js/bootstrap-3.3.7-dist/css/bootstrap-theme.min.css">
+    <link rel="stylesheet" type="text/css" href="js/My97DatePicker/skin/default/datepicker.css">
+    <link rel="stylesheet" type="text/css" href="css/sys.css">
+    <script src="js/jquery-1.9.1.min.js"></script>
+    <script src="js/bootstrap-3.3.7-dist/js/bootstrap.js"></script>
+    <script src="js/My97DatePicker/WdatePicker.js"></script>
+    <script src="js/My97DatePicker/lang/zh-cn.js"></script>
+    <script src="js/jquery-validation-1.14.0/lib/jquery.form.js"></script>
+    <script src="js/jquery-validation-1.14.0/dist/jquery.validate.min.js"></script>
+    <script src="js/jquery-validation-1.14.0/dist/additional-methods.min.js"></script>
+    <script src="js/jquery-validation-1.14.0/dist/localization/messages_zh.min.js"></script>
+    <script src="js/sys.js"></script>
+    <script>
+
+
+        $(function () {
+            // 获取服务器支持的时区id
+            var zoneIds = [];
+            $.ajax({
+                url:"api/getTimeZoneIds",
+                type:"POST",
+                dataType:"json",
+                async:false,
+                beforeSend:function(xhr){
+                    loading(true)
+                },
+                complete:function(XHR, TS){
+                    loading(false);
+                },
+                error:function(xhr){
+                    alertCloseableDangerMessage("xhr:[status:"+xhr.status+"]"+",[response:"+xhr.responseText+"]");
+                },
+                success:function(data){
+                    if(data.flag){
+                        zoneIds = data.data;
+                    }else {
+                        alertCloseableDangerMessage(data.message);
+                    }
+                }
+            });
+
+            // 获取服务端只读的任务执行类
+           $.ajax({
+               url:"api/findAvailableJobClassRegister",
+               type:"POST",
+               dataType:"json",
+               beforeSend:function(xhr){
+                 loading(true)
+               },
+               complete:function(XHR, TS){
+                   loading(false);
+               },
+
+               error:function(xhr){
+                   alertCloseableDangerMessage("xhr:[status:"+xhr.status+"]"+",[response:"+xhr.responseText+"]");
+               },
+               success:function (data) {
+                   if(data.flag){
+                       // 初始化任务执行类选择器,及其必须或非必须的参数
+                        var jobClassArray = data.data;
+                        if(!jobClassArray){
+                            return;
+                        }
+                        var $param = null;
+                        var html = [];
+                        html.push('<div class="form-group">');
+                        html.push('<label for="job-class" class="col-sm-2 control-label">&nbsp;任务类Class</label>');
+                        html.push('<div class="col-sm-6">');
+                        html.push('<select class="form-control"  id="job-class"  name="job-class">');
+                        for(var i=0;i<jobClassArray.length;i++){
+                            var job = jobClassArray[i];
+                            var jobClass = job.jobClass;
+                            var jobClassDescribe = job.jobClassDescribe
+                            html.push('<option value="'+jobClass+'">'+jobClass+' '+jobClassDescribe+'</option>');
+                        }
+                        html.push('</select>');
+                        html.push('</div>');
+                        html.push('</div>');
+                        var h = html.join('');
+                        var $h = $(h);
+                        $("#btn-new-jobkey").parents('.form-group').before($h);
+                        $h.find('select').change(function(){
+                            var value = $(this).val();
+                            if($param){$param.remove();};
+                            var jobDetail = null;
+                            for(var i=0;i<jobClassArray.length;i++){
+                                if(value == jobClassArray[i].jobClass){
+                                    jobDetail = jobClassArray[i];
+                                    break;
+                                }
+                            }
+                            var paramHtml = [];
+                            var requiredParam = jobDetail.requiredParam||[];
+                            var optionalParam = jobDetail.optionalParam||[];
+                            for(var i=0;i<requiredParam.length;i++){
+                                paramHtml.push('<div class="form-group">');
+                                paramHtml.push('<label for="job-key-required-'+requiredParam[i].key+'" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;'+requiredParam[i].name+'</label>');
+                                paramHtml.push('<div class="col-sm-6">');
+                                paramHtml.push('<input type="text" class="form-control" id="job-key-required-'+requiredParam[i].key+'" required="required" maxlength="200" name="job-key-required-'+requiredParam[i].key+'" minlength="1" placeholder="'+requiredParam[i].describe+'">');
+                                paramHtml.push('</div>');
+                                paramHtml.push('</div>');
+                            }
+                            for(var i=0;i<optionalParam.length;i++){
+                                paramHtml.push('<div class="form-group">');
+                                paramHtml.push('<label for="job-key-optional-'+optionalParam[i].key+'" class="col-sm-2 control-label">&nbsp;'+optionalParam[i].name+'</label>');
+                                paramHtml.push('<div class="col-sm-6">');
+                                paramHtml.push('<input type="text" class="form-control" id="job-key-optional-'+optionalParam[i].key+'" maxlength="200" name="job-key-optional-'+optionalParam[i].key+'"  placeholder="'+optionalParam[i].describe+'">');
+                                paramHtml.push('</div>');
+                                paramHtml.push('</div>');
+                            }
+                            paramHtml.push(' <hr style="filter: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color="#6f5499" size="3" />');
+                            $param = $(paramHtml.join(''));
+                            $("#btn-new-jobkey").parents('.form-group').before($param);
+                        });
+                       $h.find('select').change();
+
+                       var jobKeyCustomerNum = 0;
+                       // 自定义参数生成
+                       $("#btn-new-jobkey").click(function () {
+                           var customerHtml = [];
+                           customerHtml.push('<div class="form-group">');
+                           customerHtml.push('<div class="col-sm-offset-2 col-sm-6">');
+                           customerHtml.push('<button type="button" class="btn btn-default">删除自定义参数'+jobKeyCustomerNum+'</button>');
+                           customerHtml.push('</div>');
+                           customerHtml.push('</div>');
+                           customerHtml.push('<div class="form-group">');
+                           customerHtml.push('<label for="job-key-customer-name-'+jobKeyCustomerNum+'" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;自定义参数名称'+jobKeyCustomerNum+'</label>');
+                           customerHtml.push('<div class="col-sm-6">');
+                           customerHtml.push('<input type="text" class="form-control" id="job-key-customer-name-'+jobKeyCustomerNum+'" maxlength="200" required="required" name="job-key-customer-name-'+jobKeyCustomerNum+'"  placeholder="请输入自定义参数名称">');
+                           customerHtml.push('</div>');
+                           customerHtml.push('</div>');
+
+                           customerHtml.push('<div class="form-group">');
+                           customerHtml.push('<label for="job-key-customer-value-'+jobKeyCustomerNum+'" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;自定义参数值'+jobKeyCustomerNum+'</label>');
+                           customerHtml.push('<div class="col-sm-6">');
+                           customerHtml.push('<input type="text" class="form-control" id="job-key-customer-value-'+jobKeyCustomerNum+'" maxlength="200" required="required" minlength="1" name="job-key-customer-value-'+jobKeyCustomerNum+'"  placeholder="请输入自定义参数值">');
+                           customerHtml.push('</div>');
+                           customerHtml.push('</div>');
+                           customerHtml.push(' <hr style="filter: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color="#6f5499" size="3" />');
+                           var $customerHtml = $(customerHtml.join(''));
+                           $("#btn-new-jobkey").parents('.form-group').before($customerHtml);
+                           $param = $param.add($customerHtml);
+                           $customerHtml.find('button').click(function () {
+                               $customerHtml.remove();
+                           });
+                           jobKeyCustomerNum++;
+                       });
+
+
+                   }else{
+                        alertCloseableDangerMessage(data.message);
+                   }
+               }
+
+           });
+           // 触发器数量
+            var triggerNum=0;
+            // 创建简单的触发器
+            $("#btn-new-simple").click(function () {
+                // 生成html
+                var html = [];
+                html.push('<div class="form-group">');
+                     html.push('<div class="col-sm-offset-2 col-sm-6">');
+                        html.push('<button type="button" class="btn btn-default">删除简单触发器</button>');
+                    html.push('</div>');
+                html.push('</div>');
+
+                html.push('<input type="hidden" name="trigger-'+triggerNum+'-type" value="simple">');
+
+                html.push('<div class="form-group">');
+                    html.push('<label for="trigger-'+triggerNum+'-groupName" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;分组名</label>');
+                    html.push('<div class="col-sm-6">');
+                        html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-groupName" required="required" maxlength="200" name="trigger-'+triggerNum+'-groupName" minlength="1" placeholder="请输入触发器分组名称">');
+                     html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                    html.push('<label for="trigger-'+triggerNum+'-name" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;名称</label>');
+                    html.push('<div class="col-sm-6">');
+                        html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-name" required="required" maxlength="200" name="trigger-'+triggerNum+'-name" minlength="1" placeholder="请输入触发器名称">');
+                    html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-describe" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;描述</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-describe" required="required" maxlength="200" name="trigger-'+triggerNum+'-describe" minlength="1" placeholder="请输入触发器描述">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                    html.push('<label for="trigger-'+triggerNum+'-startDate" class="col-sm-2 control-label">&nbsp;开始时间</label>');
+                    html.push('<div class="col-sm-6">');
+                        html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'yyyy-MM-dd HH:mm:ss\'});" id="trigger-'+triggerNum+'-startDate"  name="trigger-'+triggerNum+'-startDate"  placeholder="请输入触发器开始时间">');
+                    html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                    html.push('<label for="trigger-'+triggerNum+'-endDate" class="col-sm-2 control-label">&nbsp;结束时间</label>');
+                    html.push('<div class="col-sm-6">');
+                        html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'yyyy-MM-dd HH:mm:ss\'});" id="trigger-'+triggerNum+'-endDate"  name="trigger-'+triggerNum+'-endDate"  placeholder="请输入触发器结束时间">');
+                    html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                    html.push('<label for="trigger-'+triggerNum+'-interval" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;触发间隔</label>');
+                    html.push('<div class="col-sm-6">');
+                        html.push('<input type="number" class="form-control digits" id="trigger-'+triggerNum+'-interval" required="required" name="trigger-'+triggerNum+'-interval"  placeholder="请输入触发间隔,单位毫秒">');
+                    html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                    html.push('<label for="trigger-'+triggerNum+'-repeatCount" class="col-sm-2 control-label">&nbsp;触发次数</label>');
+                    html.push('<div class="col-sm-6">');
+                        html.push('<input type="number" class="form-control digits"  id="trigger-'+triggerNum+'-repeatCount"  name="trigger-'+triggerNum+'-repeatCount"  placeholder="请输入触发次数">');
+                    html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-misfireInstruction" class="col-sm-2 control-label">&nbsp;未触发策略</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control misfireInstruction"  id="trigger-'+triggerNum+'-misfireInstruction"  name="trigger-'+triggerNum+'-misfireInstruction">');
+                html.push('<option value="0">自动</option>');
+                html.push('<option value="-1">忽略</option>');
+                html.push('<option value="1">立即触发</option>');
+                html.push('<option value="5">使用已存在的数量忽略</option>');
+                html.push('<option value="4">按照已执行忽略</option>');
+                html.push('<option value="2">立即触发,重置触发数量,如果已过结束时间则不触发</option>');
+                html.push('<option value="3">立即触发,不重置触发数量,如果已过结束时间则不触发</option>');
+                html.push('</select>');
+                html.push('</div>');
+                html.push('<div class="col-sm-offset-2 col-sm-6">Instructs the Scheduler that upon a mis-fire situation, the updateAfterMisfire() method will be called on the Trigger to determine the mis-fire instruction, which logic will be trigger-implementation-dependent.\n' +
+                    'In order to see if this instruction fits your needs, you should look at the documentation for the getSmartMisfirePolicy() method on the particular Trigger implementation you are using.</div>')
+                html.push('</div>');
+                // 分割线
+                html.push('<hr style="filter: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color="#6f5499" size="3" />')
+                // 插入页面
+                var h = html.join('');
+                var $h = $(h);
+                $(this).parents('.form-group').before($h);
+                // 日期选择控件样式
+                $h.find(".Wdate").css("height","auto");
+                // 注释
+                $h.find(".misfireInstruction").change(function () {
+                    var value = $(this).val();
+                    if(value == '0'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the updateAfterMisfire() method will be called on the Trigger to determine the mis-fire instruction, which logic will be trigger-implementation-dependent.\n' +
+                            'In order to see if this instruction fits your needs, you should look at the documentation for the getSmartMisfirePolicy() method on the particular Trigger implementation you are using.');
+                    }else if(value == '-1'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that the Trigger will never be evaluated for a misfire situation, and that the scheduler will simply try to fire it as soon as it can, and then update the Trigger as if it had fired at the proper time.\n' +
+                            'NOTE: if a trigger uses this instruction, and it has missed several of its scheduled firings, then several rapid firings may occur as the trigger attempt to catch back up to where it would have been. For example, a SimpleTrigger that fires every 15 seconds which has misfired for 5 minutes will fire 20 times once it gets the chance to fire.');
+                    }else if(value == '1'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the SimpleTrigger wants to be fired now by Scheduler.\n' +
+                            'NOTE: This instruction should typically only be used for \'one-shot\' (non-repeating) Triggers. If it is used on a trigger with a repeat count > 0 then it is equivalent to the instruction');
+                    }else if(value == '5'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the SimpleTrigger wants to be re-scheduled to the next scheduled time after \'now\' - taking into account any associated Calendar, and with the repeat count left unchanged.\n' +
+                            'NOTE/WARNING: This instruction could cause the Trigger to go directly to the \'COMPLETE\' state if the end-time of the trigger has arrived.');
+                    }else if(value == '4'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the SimpleTrigger wants to be re-scheduled to the next scheduled time after \'now\' - taking into account any associated Calendar, and with the repeat count set to what it would be, if it had not missed any firings.\n' +
+                            'NOTE/WARNING: This instruction could cause the Trigger to go directly to the \'COMPLETE\' state if all fire-times where missed.');
+                    }else if(value == '2'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the SimpleTrigger wants to be re-scheduled to \'now\' (even if the associated Calendar excludes \'now\') with the repeat count left as-is. This does obey the Trigger end-time however, so if \'now\' is after the end-time the Trigger will not fire again.\n' +
+                            'NOTE: Use of this instruction causes the trigger to \'forget\' the start-time and repeat-count that it was originally setup with (this is only an issue if you for some reason wanted to be able to tell what the original values were at some later time).');
+                    }else if(value == '1'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the SimpleTrigger wants to be re-scheduled to \'now\' (even if the associated Calendar excludes \'now\') with the repeat count set to what it would be, if it had not missed any firings. This does obey the Trigger end-time however, so if \'now\' is after the end-time the Trigger will not fire again.\n' +
+                            'NOTE: Use of this instruction causes the trigger to \'forget\' the start-time and repeat-count that it was originally setup with. Instead, the repeat count on the trigger will be changed to whatever the remaining repeat count is (this is only an issue if you for some reason wanted to be able to tell what the original values were at some later time).\n' +
+                            'NOTE: This instruction could cause the Trigger to go to the \'COMPLETE\' state after firing \'now\', if all the repeat-fire-times where missed.');
+                    }
+                });
+
+                // 删除按钮
+                $h.find("button").click(function () {
+                   $h.remove();
+                });
+                triggerNum++;
+
+            });
+
+            // 创建corn 表达式触发器
+            $("#btn-new-corn").click(function () {
+                var html = [];
+                html.push('<div class="form-group">');
+                html.push('<div class="col-sm-offset-2 col-sm-6">');
+                html.push('<button type="button" class="btn btn-default">删除Cron触发器</button>');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<input type="hidden" name="trigger-'+triggerNum+'-type" value="cron">');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-groupName" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;分组名</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-groupName" required="required" maxlength="200" name="trigger-'+triggerNum+'-groupName" minlength="1" placeholder="请输入触发器分组名称">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-name" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;名称</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-name" required="required" maxlength="200" name="trigger-'+triggerNum+'-name" minlength="1" placeholder="请输入触发器名称">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-describe" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;描述</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-describe" required="required" maxlength="200" name="trigger-'+triggerNum+'-describe" minlength="1" placeholder="请输入触发器描述">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-startDate" class="col-sm-2 control-label">&nbsp;开始时间</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'yyyy-MM-dd HH:mm:ss\'});" id="trigger-'+triggerNum+'-startDate"  name="trigger-'+triggerNum+'-startDate"  placeholder="请输入触发器开始时间">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-endDate" class="col-sm-2 control-label">&nbsp;结束时间</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'yyyy-MM-dd HH:mm:ss\'});" id="trigger-'+triggerNum+'-endDate"  name="trigger-'+triggerNum+'-endDate"  placeholder="请输入触发器结束时间">');
+                html.push('</div>');
+                html.push('</div>');
+
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-cronExpression" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;corn表达式</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-cronExpression" required="required" name="trigger-'+triggerNum+'-cronExpression"  placeholder="请输入corn表达式">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-timeZone" class="col-sm-2 control-label">&nbsp;时区</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control"  id="trigger-'+triggerNum+'-timeZone"  name="trigger-'+triggerNum+'-timeZone">');
+                html.push('<option value="">---请选择timeZone---</option>');
+                for(var index = 0;index < zoneIds.length; index++){
+                    html.push('<option value="'+zoneIds[index]+'">---'+zoneIds[index]+'---</option>');
+                }
+                html.push('</select>');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-misfireInstruction" class="col-sm-2 control-label">&nbsp;未触发策略</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control misfireInstruction"  id="trigger'+triggerNum+'-misfireInstruction"  name="trigger-'+triggerNum+'-misfireInstruction">');
+                html.push('<option value="0">自动</option>');
+                html.push('<option value="-1">忽略</option>');
+                html.push('<option value="1">立即触发</option>');
+                html.push('<option value="2">将其下一个触发时间更新为当前时间之后计划中的下一个时间</option>');
+                html.push('</select>');
+                html.push('</div>');
+                html.push('<div class="col-sm-offset-2 col-sm-6">Instructs the Scheduler that upon a mis-fire situation, the updateAfterMisfire() method will be called on the Trigger to determine the mis-fire instruction, which logic will be trigger-implementation-dependent.\n'+
+                    ' In order to see if this instruction fits your needs, you should look at the documentation for the getSmartMisfirePolicy() method on the particular Trigger implementation you are using.</div>')
+                html.push('</div>');
+
+                html.push('<hr style="filter: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color="#6f5499" size="3" />')
+
+                var h = html.join('');
+                var $h = $(h);
+                $(this).parents('.form-group').before($h);
+                $h.find(".Wdate").css("height","auto");
+                $h.find(".misfireInstruction").change(function () {
+                    var value = $(this).val();
+                    if(value == '0'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the updateAfterMisfire() method will be called on the Trigger to determine the mis-fire instruction, which logic will be trigger-implementation-dependent.\n' +
+                            'In order to see if this instruction fits your needs, you should look at the documentation for the getSmartMisfirePolicy() method on the particular Trigger implementation you are using.');
+                    }else if(value == '-1'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that the Trigger will never be evaluated for a misfire situation, and that the scheduler will simply try to fire it as soon as it can, and then update the Trigger as if it had fired at the proper time.\n' +
+                            'NOTE: if a trigger uses this instruction, and it has missed several of its scheduled firings, then several rapid firings may occur as the trigger attempt to catch back up to where it would have been. For example, a SimpleTrigger that fires every 15 seconds which has misfired for 5 minutes will fire 20 times once it gets the chance to fire.');
+                    }else if(value == '1'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the CronTrigger wants to be fired now by Scheduler.');
+                    }else if(value == '2'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the CronTrigger wants to have it\'s next-fire-time updated to the next time in the schedule after the current time (taking into account any associated Calendar, but it does not want to be fired now.');
+                    }
+                });
+
+                $h.find("button").click(function () {
+                    $h.remove();
+                });
+                triggerNum++;
+            });
+
+            // 创建日历触发器
+            $("#btn-new-cal").click(function () {
+                var html = [];
+                html.push('<div class="form-group">');
+                html.push('<div class="col-sm-offset-2 col-sm-6">');
+                html.push('<button type="button" class="btn btn-default">删除日历触发器</button>');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<input type="hidden" name="trigger-'+triggerNum+'-type" value="cal">');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-groupName" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;分组名</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-groupName" required="required" maxlength="200" name="trigger-'+triggerNum+'-groupName" minlength="1" placeholder="请输入触发器分组名称">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-name" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;名称</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-name" required="required" maxlength="200" name="trigger-'+triggerNum+'-name" minlength="1" placeholder="请输入触发器名称">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-describe" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;描述</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-describe" required="required" maxlength="200" name="trigger-'+triggerNum+'-describe" minlength="1" placeholder="请输入触发器描述">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-startDate" class="col-sm-2 control-label">&nbsp;开始时间</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'yyyy-MM-dd HH:mm:ss\'});" id="trigger-'+triggerNum+'-startDate"  name="trigger-'+triggerNum+'-startDate"  placeholder="请输入触发器开始时间">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-endDate" class="col-sm-2 control-label">&nbsp;结束时间</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'yyyy-MM-dd HH:mm:ss\'});" id="trigger-'+triggerNum+'-endDate"  name="trigger-'+triggerNum+'-endDate"  placeholder="请输入触发器结束时间">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-interval" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;触发间隔</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="number" class="form-control digits" id="trigger-'+triggerNum+'-interval" min="1" required="required" name="trigger-'+triggerNum+'-interval"  placeholder="请输入触发间隔">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-intervalUnit" class="col-sm-2 control-label">&nbsp;间隔单位</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control"  id="trigger-'+triggerNum+'-intervalUnit"  name="trigger-'+triggerNum+'-intervalUnit">');
+                html.push('<option value="MILLISECOND">毫秒</option>');
+                html.push('<option value="SECOND">秒</option>');
+                html.push('<option value="MINUTE">分钟</option>');
+                html.push('<option value="HOUR">小时</option>');
+                html.push('<option value="DAY">天</option>');
+                html.push('<option value="WEEK">周</option>');
+                html.push('<option value="MONTH">月</option>');
+                html.push('<option value="YEAR">年</option>');
+                html.push('</select>');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-timeZone" class="col-sm-2 control-label">&nbsp;时区</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control"  id="trigger-'+triggerNum+'-timeZone"  name="trigger-'+triggerNum+'-timeZone">');
+                html.push('<option value="">---请选择timeZone---</option>');
+                for(var index = 0;index < zoneIds.length; index++){
+                    html.push('<option value="'+zoneIds[index]+'">---'+zoneIds[index]+'---</option>');
+                }
+                html.push('</select>');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-preserveHourOfDay" class="col-sm-2 control-label">&nbsp;preserveHourOfDay</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control"  id="trigger-'+triggerNum+'-preserveHourOfDay"  name="trigger-'+triggerNum+'-preserveHourOfDay">');
+                html.push('<option value="false">false</option>');
+                html.push('<option value="true">true</option>');
+                html.push('</select>');
+                html.push('</div>');
+                html.push('<div class="col-sm-offset-2 col-sm-6">If intervals are a day or greater, this property (set to true) will cause the firing of the trigger to always occur at the same time of day, (the time of day of the startTime) regardless of daylight saving time transitions. Default value is false.\n' +
+                    'For example, without the property set, your trigger may have a start time of 9:00 am on March 1st, and a repeat interval of 2 days. But after the daylight saving transition occurs, the trigger may start firing at 8:00 am every other day.\n' +
+                    'If however, the time of day does not exist on a given day to fire (e.g. 2:00 am in the United States on the days of daylight saving transition), the trigger will go ahead and fire one hour off on that day, and then resume the normal hour on other days. If you wish for the trigger to never fire at the "wrong" hour, then you should set the property skipDayIfHourDoesNotExist.\n</div>');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-skipDay" class="col-sm-2 control-label">&nbsp;skipDay</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control"  id="trigger'+triggerNum+'-skipDay"  name="trigger-'+triggerNum+'-skipDay">');
+                html.push('<option value="false">false</option>');
+                html.push('<option value="true">true</option>');
+                html.push('</select>');
+                html.push('</div>');
+                html.push('<div class="col-sm-offset-2 col-sm-6">If intervals are a day or greater, and preserveHourOfDayAcrossDaylightSavings property is set to true, and the hour of the day does not exist on a given day for which the trigger would fire, the day will be skipped and the trigger advanced a second interval if this property is set to true. Defaults to false.\n' +
+                    'CAUTION! If you enable this property, and your hour of day happens to be that of daylight savings transition (e.g. 2:00 am in the United States) and the trigger\'s interval would have had the trigger fire on that day, then you may actually completely miss a firing on the day of transition if that hour of day does not exist on that day! In such a case the next fire time of the trigger will be computed as double (if the interval is 2 days, then a span of 4 days between firings will occur).</div>');
+                html.push('</div>');
+                html.push('</div>');
+
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-misfireInstruction" class="col-sm-2 control-label">&nbsp;未触发策略</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control misfireInstruction"  id="trigger-'+triggerNum+'-misfireInstruction"  name="trigger-'+triggerNum+'-misfireInstruction">');
+                html.push('<option value="0">自动</option>');
+                html.push('<option value="-1">忽略</option>');
+                html.push('<option value="1">立即触发</option>');
+                html.push('<option value="2">将其下一个触发时间更新为当前时间之后计划中的下一个时间</option>');
+                html.push('</select>');
+                html.push('</div>');
+                html.push('<div class="col-sm-offset-2 col-sm-6">Instructs the Scheduler that upon a mis-fire situation, the updateAfterMisfire() method will be called on the Trigger to determine the mis-fire instruction, which logic will be trigger-implementation-dependent.\n' +
+                    'In order to see if this instruction fits your needs, you should look at the documentation for the getSmartMisfirePolicy() method on the particular Trigger implementation you are using.</div>')
+                html.push('</div>');
+
+                html.push('<hr style="filter: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color="#6f5499" size="3" />')
+
+                var h = html.join('');
+                var $h = $(h);
+                $(this).parents('.form-group').before($h);
+                $h.find(".Wdate").css("height","auto");
+                $h.find(".misfireInstruction").change(function () {
+                    var value = $(this).val();
+                    if(value == '0'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the updateAfterMisfire() method will be called on the Trigger to determine the mis-fire instruction, which logic will be trigger-implementation-dependent.\n' +
+                            'In order to see if this instruction fits your needs, you should look at the documentation for the getSmartMisfirePolicy() method on the particular Trigger implementation you are using.');
+                    }else if(value == '-1'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that the Trigger will never be evaluated for a misfire situation, and that the scheduler will simply try to fire it as soon as it can, and then update the Trigger as if it had fired at the proper time.\n' +
+                            'NOTE: if a trigger uses this instruction, and it has missed several of its scheduled firings, then several rapid firings may occur as the trigger attempt to catch back up to where it would have been. For example, a SimpleTrigger that fires every 15 seconds which has misfired for 5 minutes will fire 20 times once it gets the chance to fire.');
+                    }else if(value == '1'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the CalendarIntervalTrigger wants to be fired now by Scheduler.');
+                    }else if(value == '2'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the CalendarIntervalTrigger wants to have it\'s next-fire-time updated to the next time in the schedule after the current time (taking into account any associated Calendar, but it does not want to be fired now.');
+                    }
+                });
+
+                $h.find("button").click(function () {
+                    $h.remove();
+                });
+                triggerNum++;
+            });
+
+            // 创建星期触发器
+            $("#btn-new-daily").click(function () {
+                var html = [];
+                html.push('<div class="form-group">');
+                html.push('<div class="col-sm-offset-2 col-sm-6">');
+                html.push('<button type="button" class="btn btn-default">删除星期触发器</button>');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<input type="hidden" name="trigger-'+triggerNum+'-type" value="daily">');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-groupName" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;分组名</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-groupName" required="required" maxlength="200" name="trigger-'+triggerNum+'-groupName" minlength="1" placeholder="请输入触发器分组名称">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-name" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;名称</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-name" required="required" maxlength="200" name="trigger-'+triggerNum+'-name" minlength="1" placeholder="请输入触发器名称">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-describe" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;描述</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control" id="trigger-'+triggerNum+'-describe" required="required" maxlength="200" name="trigger-'+triggerNum+'-describe" minlength="1" placeholder="请输入触发器描述">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-startDate" class="col-sm-2 control-label">&nbsp;开始时间</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'yyyy-MM-dd HH:mm:ss\'});" id="trigger-'+triggerNum+'-startDate"  name="trigger-'+triggerNum+'-startDate"  placeholder="请输入触发器开始时间">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-endDate" class="col-sm-2 control-label">&nbsp;结束时间</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'yyyy-MM-dd HH:mm:ss\'});" id="trigger-'+triggerNum+'-endDate"  name="trigger-'+triggerNum+'-endDate"  placeholder="请输入触发器结束时间">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-interval" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;触发间隔</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="number" class="form-control digits" id="trigger-'+triggerNum+'-interval" min="1" required="required" name="trigger-'+triggerNum+'-interval"  placeholder="请输入触发间隔">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-intervalUnit" class="col-sm-2 control-label">&nbsp;间隔单位</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control"  id="trigger-'+triggerNum+'-intervalUnit"  name="trigger-'+triggerNum+'-intervalUnit">');
+                html.push('<option value="SECOND">秒</option>');
+                html.push('<option value="MINUTE">分钟</option>');
+                html.push('<option value="HOUR">小时</option>');
+                html.push('</select>');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-repeatCount" class="col-sm-2 control-label">&nbsp;触发次数</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="number" class="form-control digits"  id="trigger-'+triggerNum+'-repeatCount"  name="trigger-'+triggerNum+'-repeatCount"  placeholder="请输入触发次数">');
+                html.push('</div>');
+                html.push('</div>');
+
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-startTimeOfDay" class="col-sm-2 control-label">&nbsp;当日开始时间</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'HH:mm:ss\'});"  id="trigger-'+triggerNum+'-startTimeOfDay"  name="trigger-'+triggerNum+'-startTimeOfDay">');
+                html.push('</div>');
+                html.push('</div>');
+
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-endTimeOfDay" class="col-sm-2 control-label">&nbsp;当日结束时间</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control Wdate" onclick="WdatePicker({dateFmt:\'HH:mm:ss\'});"  id="trigger-'+triggerNum+'-endTimeOfDay"  name="trigger-'+triggerNum+'-endTimeOfDay">');
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-daysOfWeek" class="col-sm-2 control-label">&nbsp;触发日期</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<input type="text" class="form-control"  id="trigger-'+triggerNum+'-daysOfWeek"  name="trigger-'+triggerNum+'-daysOfWeek" placeholder="请输入触发日期,1-7,中间以逗号隔开,代表周一到周日">' );
+                html.push('</div>');
+                html.push('</div>');
+
+                html.push('<div class="form-group">');
+                html.push('<label for="trigger-'+triggerNum+'-misfireInstruction" class="col-sm-2 control-label">&nbsp;未触发策略</label>');
+                html.push('<div class="col-sm-6">');
+                html.push('<select class="form-control misfireInstruction"  id="trigger-'+triggerNum+'-misfireInstruction"  name="trigger-'+triggerNum+'-misfireInstruction">');
+                html.push('<option value="0">自动</option>');
+                html.push('<option value="-1">忽略</option>');
+                html.push('<option value="1">立即触发</option>');
+                html.push('<option value="2">将其下一个触发时间更新为当前时间之后计划中的下一个时间</option>');
+                html.push('</select>');
+                html.push('</div>');
+                html.push('<div class="col-sm-offset-2 col-sm-6">Instructs the Scheduler that upon a mis-fire situation, the updateAfterMisfire() method will be called on the Trigger to determine the mis-fire instruction, which logic will be trigger-implementation-dependent.\n' +
+                    'In order to see if this instruction fits your needs, you should look at the documentation for the getSmartMisfirePolicy() method on the particular Trigger implementation you are using.</div>')
+                html.push('</div>');
+
+                html.push('<hr style="filter: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color="#6f5499" size="3" />')
+
+                var h = html.join('');
+                var $h = $(h);
+                $(this).parents('.form-group').before($h);
+                $h.find(".Wdate").css("height","auto");
+                $h.find(".misfireInstruction").change(function () {
+                    var value = $(this).val();
+                    if(value == '0'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the updateAfterMisfire() method will be called on the Trigger to determine the mis-fire instruction, which logic will be trigger-implementation-dependent.\n' +
+                            'In order to see if this instruction fits your needs, you should look at the documentation for the getSmartMisfirePolicy() method on the particular Trigger implementation you are using.');
+                    }else if(value == '-1'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the CalendarIntervalTrigger wants to be fired now by Scheduler.');
+                    }else if(value == '1'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the CalendarIntervalTrigger wants to be fired now by Scheduler.');
+                    }else if(value == '2'){
+                        $(this).parent().next().empty().append('Instructs the Scheduler that upon a mis-fire situation, the DailyTimeIntervalTrigger wants to have it\'s next-fire-time updated to the next time in the schedule after the current time (taking into account any associated Calendar, but it does not want to be fired now.');
+                    }
+                });
+
+                $h.find("button").click(function () {
+                    $h.remove();
+                });
+                triggerNum++;
+            });
+
+            // 表单提交
+            $("form").validate({
+                submitHandler: function(form){
+                    $(form).ajaxSubmit({
+                        dataType:"json",
+                        beforeSend:function(xhr){
+                            loading(true)
+                        },
+                        complete:function(XHR, TS){
+                            loading(false);
+                        },
+                        success:function(data){
+                            if(data.flag){
+                                alertCloseableSuccessMessage("保存完成", 'location.href="index.html"');
+                            }else {
+                                alertCloseableDangerMessage(data.message);
+                            }
+                        }
+                    });
+                    return false;
+                }
+            });
+        });
+    </script>
+
+</head>
+<body>
+<ol class="breadcrumb">
+    <li><a href="index.html">Home</a></li>
+    <li><a href="newJob.html">新建任务</a></li>
+</ol><br>
+<div>
+    <form class="form-horizontal" action="api/saveJob" method="post">
+        <div class="form-group">
+            <label for="job-groupName" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;分组名</label>
+            <div class="col-sm-6">
+                <input type="text" class="form-control" id="job-groupName" required="required" maxlength="200" name="job-groupName"
+                       minlength="1" placeholder="请输入分组名">
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="job-name" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;任务名称</label>
+            <div class="col-sm-6">
+                <input type="text" class="form-control" id="job-name" required="required" maxlength="200" name="job-name"
+                       minlength="1" placeholder="请输入任务名称">
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="job-describe" class="col-sm-2 control-label"><span class="color-red">*</span>&nbsp;任务描述</label>
+            <div class="col-sm-6">
+                <input type="text" class="form-control" id="job-describe" required="required" maxlength="200" name="job-describe"
+                       minlength="1" placeholder="请输入任务描述">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="col-sm-offset-2 col-sm-6">
+                <button id="btn-new-jobkey" class="btn btn-primary" type="button">新增执行属性</button>
+            </div>
+        </div>
+        <hr style="filter: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color="#6f5499" size="3" />
+
+        <div class="form-group">
+            <div class="col-sm-offset-2 col-sm-6">
+                <button id="btn-new-simple" type="button" class="btn btn-primary">新增简单触发器</button>
+                <button id="btn-new-corn" type="button" class="btn btn-primary">新增corn触发器</button>
+                <button id="btn-new-cal" type="button" class="btn btn-primary">新增日期触发器</button>
+                <button id="btn-new-daily"  type="button" class="btn btn-primary">新增星期触发器</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="col-sm-offset-2 col-sm-6">
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </div>
+    </form>
+</div>
+</body>
+
+
+
+</html>

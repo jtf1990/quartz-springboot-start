@@ -1,0 +1,4 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.jtf.quartzstarter.config.QuartzAutoConfigure,\
+com.jtf.quartzstarter.config.QuartzWebAutoConfigure,\
+com.jtf.quartzstarter.config.QuartzLoggerBackAutoConfigure

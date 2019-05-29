@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>quartz</title>
+    <link rel="stylesheet" type="text/css" href="js/bootstrap-3.3.7-dist/css/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="js/bootstrap-3.3.7-dist/css/bootstrap-theme.min.css">
+    <link rel="stylesheet" type="text/css" href="js/My97DatePicker/skin/default/datepicker.css">
+    <link rel="stylesheet" type="text/css" href="css/sys.css">
+    <script src="js/jquery-1.9.1.min.js"></script>
+    <script src="js/bootstrap-3.3.7-dist/js/bootstrap.js"></script>
+    <script src="js/My97DatePicker/WdatePicker.js"></script>
+    <script src="js/My97DatePicker/lang/zh-cn.js"></script>
+    <script src="js/jquery-validation-1.14.0/lib/jquery.form.js"></script>
+    <script src="js/jquery-validation-1.14.0/dist/jquery.validate.min.js"></script>
+    <script src="js/jquery-validation-1.14.0/dist/additional-methods.min.js"></script>
+    <script src="js/jquery-validation-1.14.0/dist/localization/messages_zh.min.js"></script>
+    <script src="js/sys.js"></script>
+    <script>
+
+        function del(el, time, success){
+            $.ajax({
+                url:"api/deleteLogging",
+                type:"POST",
+                dataType:"json",
+                data:{name:name, group:group, fireTime:time, success:success},
+                async:false,
+                beforeSend:function(xhr){
+                    loading(true)
+                },
+                complete:function(XHR, TS){
+                    loading(false);
+                },
+                error:function(xhr){
+                    alertCloseableDangerMessage("xhr:[status:"+xhr.status+"]"+",[response:"+xhr.responseText+"]");
+                },
+                success:function(data){
+                    if(data.flag){
+                        alertCloseableSuccessMessage("删除成功",function () {
+                           $(el).parents(".dropdown").remove();
+                        });
+
+                    }else {
+                        alertCloseableDangerMessage(data.message);
+                    }
+                }
+            });
+        }
+
+        function delAll(){
+            $.ajax({
+                url:"api/deleteAllLogging",
+                type:"POST",
+                dataType:"json",
+                data:{name:name, group:group},
+                async:false,
+                beforeSend:function(xhr){
+                    loading(true)
+                },
+                complete:function(XHR, TS){
+                    loading(false);
+                },
+                error:function(xhr){
+                    alertCloseableDangerMessage("xhr:[status:"+xhr.status+"]"+",[response:"+xhr.responseText+"]");
+                },
+                success:function(data){
+                    if(data.flag){
+                        alertCloseableSuccessMessage("删除成功",function () {
+                            location.href="index.html";
+                        });
+
+                    }else {
+                        alertCloseableDangerMessage(data.message);
+                    }
+                }
+            });
+        }
+        function delLogging(){
+            var value = $("body").find("input").val();
+            if(value == null || value == undefined || value<1){
+                alertCloseableWarnMessage("请输入正确的天数");
+                return;
+            }
+            $.ajax({
+                url:"api/deleteBeforeLogging",
+                type:"POST",
+                dataType:"json",
+                data:{name:name, group:group, before:value},
+                async:false,
+                beforeSend:function(xhr){
+                    loading(true)
+                },
+                complete:function(XHR, TS){
+                    loading(false);
+                },
+                error:function(xhr){
+                    alertCloseableDangerMessage("xhr:[status:"+xhr.status+"]"+",[response:"+xhr.responseText+"]");
+                },
+                success:function(data){
+                    if(data.flag){
+                        alertCloseableSuccessMessage("删除成功",function () {
+                            location.reload();
+                        });
+
+                    }else {
+                        alertCloseableDangerMessage(data.message);
+                    }
+                }
+            });
+        }
+        $(function () {
+            window.group = findOneUrlParam('group');
+            window.name = findOneUrlParam("name");
+            if(group && name ){
+                $('#job').children("a")
+                    .attr("href","logging.html?group="+group+"&name="+name)
+                    .text(group+"."+name);
+                $.ajax({
+                    url:"api/findLogging",
+                    type:"POST",
+                    dataType:"json",
+                    data:{name:name, group:group},
+                    async:false,
+                    beforeSend:function(xhr){
+                        loading(true)
+                    },
+                    complete:function(XHR, TS){
+                        loading(false);
+                    },
+                    error:function(xhr){
+                        alertCloseableDangerMessage("xhr:[status:"+xhr.status+"]"+",[response:"+xhr.responseText+"]");
+                    },
+                    success:function(data){
+                        if(data.flag){
+                           var result = data.data||{};
+                           var index = 0;
+                           $.each(result, function (i,v) {
+                           // <div class="dropdown">
+                           //         <button id="dLabel" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                           //         Dropdown trigger
+                           //     <span class="caret"></span>
+                           //         </button>
+                           //         <ul class="dropdown-menu" aria-labelledby="dLabel">
+                           // ...
+                           // </ul>
+                           //     </div>
+                               var html = [];
+                               html.push('<div class="dropdown" style="display: inline-block;">');
+                               html.push('<a href="#" id="dLabel'+index+'" class="'+(v?'':'color-red')+'" style="margin-left: 40px;" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">');
+                               html.push(i);
+                               html.push('</a>');
+                               html.push('<ul class="dropdown-menu" aria-labelledby="dLabel'+index+'">');
+                               html.push('<li><a href="detail.html?group='+group+'&name='+name+'&success='+v+'&fireTime='+i+'">查询明细</a></li>');
+                               html.push('<li><a href="#" onclick="del(this,\''+i+'\','+v+')">删除</a></li>');
+                               html.push('</ul>');
+                               html.push('</div>');
+                               $("#body").append(html.join(''));
+                               index++;
+
+                           });
+
+                        }else {
+                            alertCloseableDangerMessage(data.message);
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+
+</head>
+<body>
+<ol class="breadcrumb">
+    <li><a href="index.html">Home</a></li>
+    <li id="job"><a></a></li>
+</ol>
+<div style="margin-left: 80px;margin-right: 40px;">
+    <button class="btn btn-primary" onclick="delAll();">删除所有</button><br/>
+    <button class="btn btn-primary" onclick="delLogging()"> 删除 </button> <input type="number" min="1" max="2000" class="input-sm"/> <strong> 天之前的日志</strong><br/>
+</div>
+<div id="body" style="margin-left: 40px;margin-right: 40px;">
+
+</div>
+</body>
+
+
+
+</html>
