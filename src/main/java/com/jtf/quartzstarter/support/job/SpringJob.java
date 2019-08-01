@@ -79,6 +79,8 @@ public class SpringJob extends AbstractJobClassRegister implements Job {
                 String param = jobDataMap.getString("methodParam"+i);
                 if(Objects.isNull(param)){
                     paramValue[i] = param;
+                }else if(paramClass[i].equals(JobExecutionContext.class)){
+                    paramValue[i] = context;
                 }else{
                     paramValue[i] = DefaultConversionService.getSharedInstance().convert(param, paramClass[i]);
                 }
@@ -96,6 +98,7 @@ public class SpringJob extends AbstractJobClassRegister implements Job {
         }
         logger.debug("定时任务springjob开始执行, className:{}, methodName:{}, paramClass:{}, paramValue:{}",
                 serverClass,methodName, Arrays.toString(paramClass), Arrays.toString(paramValue));
+
 
         Object result = null;
         try{
